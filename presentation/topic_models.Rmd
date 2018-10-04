@@ -1,0 +1,591 @@
+---
+title: "Understanding Topic Modeling: From Multivariate OLS to LDA"
+author: |
+  | Salfo Bikienga
+  | sbikienga@gmail.com
+institute: "Columbus Machine Learners meetup"
+date: 'October 03, 2018'
+output: 
+  beamer_presentation:
+    theme: "default"
+    colortheme: "seahorse"
+    fonttheme: "structurebold"
+    incremental: true
+    includes:
+      in_header: mypreamble.tex
+bibliography: reference2.bib
+---
+
+# Agenda
+
+> - Introduction 
+> - Prerequisite 
+> - Non Negative Matrix Factorization 
+> - Principal Component Analysis 
+> - Latent Semantic Analysis 
+> - Probabilistic Latent Semantic Analysis 
+> - Latent Dirichlet Allocation 
+> - Take home message
+
+---
+
+## Introduction
+
+---
+
+# Introduction
+
+- Topic modeling methods are dimension reduction methods.
+- Generaly useful for:
+    + document clustering;
+    + document classification;
+    + regression type of analysis;
+    + ...
+
+---
+
+# Introduction
+
+- The goal is to understand LDA through the lens of OLS.
+- LDA is a Bayesian approach to pLSA.
+- pLSA is a maximum likelihood approach to LSA.
+- LSA is equivalent to PCA
+- PCA is a matrix factorization algorithm (MF).
+- MF is an application of OLS.
+- The general idea of these algorithms is that: $$W_{D\times V}\simeq Z_{D\times K}B_{K\times V}$$ where $K<<V$
+
+---
+
+# Introduction: practical example
+
+Collapse a [$W_{596\times 1034}$](https://rpubs.com/sbikienga/334137) words counts into a $Z_{596 \times 2}$ matrix:
+```{r, echo=FALSE, message=FALSE, warning=FALSE}
+library(stargazer)
+library(topicmodels)
+load("C:/Users/Salfo/Google Drive/Dissertation/Stat_WeeklyMeeting/words_data/data/LDA_25/lda_output/lda_results1.RData")
+theta_1_2 <- data.frame(posterior(lda_results[[2-1]])$topics) 
+names(theta_1_2) <- paste("Topic.", 1:2, sep = "")
+Topics_terms_2 <- terms(lda_results[[2-1]], 30)
+phi_1_2 <- data.frame(t(posterior(lda_results[[2-1]])$terms))
+names(phi_1_2) <- c("Topic.1" ,"Topic.2")
+```
+
+\begincols
+\begincol{.48\textwidth}
+```{r, results='asis', echo=FALSE, message=FALSE, warning=FALSE}
+stargazer(head(theta_1_2, n = 6), summary = FALSE, title = "Example of topics distributions when K = 2",
+          type = "latex", digits = 2, label = "T1", header = FALSE, font.size = "tiny")
+```
+
+$$Z$$
+\endcol
+\begincol{.48\textwidth}
+```{r, results='asis', echo=FALSE, message=FALSE, warning=FALSE}
+stargazer(head(phi_1_2, n = 10), summary = FALSE, title = "Words relative importance when K = 2",
+          type = "latex", digits = 2, label = "T_1", header = FALSE, font.size = "tiny")
+```
+
+$$B^T$$
+\endcol
+\endcols
+
+----
+
+# Introduction: practical example
+
+```{r, results='asis', echo=FALSE, message=FALSE, warning=FALSE, size = "tiny"}
+stargazer(head(Topics_terms_2, n = 15), summary = FALSE, title = "List of words ordered by their relative importance for their respective topics. The list is used to infer the meaning of the topic.", type = "latex", digits = 2, label = "T2", header = FALSE, font.size = "scriptsize")
+```
+
+---
+
+## Prerequisite
+
+---
+
+# Prerequisite: basic rules
+
+- The Bayes rule: $$p(B|Y)= \frac{p(Y|B)*p(B)}{p(Y)} \varpropto p(Y|B)*p(B)$$
+- Matrix product rule:
+$$
+  \begin{pmatrix}
+    4&3&1 \\
+    2& 4 & 0
+  \end{pmatrix}
+  =
+  \begin{pmatrix}
+    1&1\\
+    0&2
+  \end{pmatrix}
+  \begin{pmatrix}
+    3&1&1\\
+    1& 2&0
+  \end{pmatrix}
+$$ 
+
+- Transpose of a matrix product: $$(AB)^T=B^TA^T$$
+
+--- 
+
+# Prerequisite: Simple OLS 
+- Extended form:
+$$
+  \begin{pmatrix}
+    y_1 \\
+    y_2 \\
+    \vdots \\
+    y_n
+  \end{pmatrix}
+  =
+  \begin{pmatrix}
+    X_{1,1}&X_{1,2} \\
+    X_{2,1}&X_{2,2} \\
+    \vdots & \vdots \\
+    X_{n,1} & X_{n,2}
+  \end{pmatrix}
+  \begin{pmatrix}
+    \beta_1\\
+    \beta_2
+  \end{pmatrix}
+  +
+  \begin{pmatrix}
+    \epsilon_1 \\
+    \epsilon_2 \\
+    \vdots \\
+    \epsilon_n
+  \end{pmatrix}
+$$
+
+- Matrix form: 
+    + $y_{n\times 1} = X_{n\times p}\beta_{p \times 1} + \epsilon_{n \times 1}$ 
+    + Assuming $X^T\epsilon = 0$, $$X^Ty = X^TX\beta$$ 
+    + Assuming $X^TX$ invertible, $(X^TX)^{-1}X^Ty = \hat\beta$ 
+
+---
+
+# Prerequisite: Multivariate OLS
+
+- Extended form:
+$$
+\tiny{
+  \begin{pmatrix}
+    y_{1,1} & y_{1,2} & y_{1,3}\\
+    y_{2,1} & y_{2,2} & y_{1,3} \\
+    \vdots & \vdots & \vdots \\
+    y_{n,1} & y_{n,2} & y_{1,3}
+  \end{pmatrix}
+  =
+  \begin{pmatrix}
+    X_{1,1}&X_{1,2} \\
+    X_{2,1}&X_{2,2} \\
+    \vdots & \vdots \\
+    X_{n,1} & X_{n,2}
+  \end{pmatrix}
+  \begin{pmatrix}
+    \beta_{1,1} & \beta_{1,2} & \beta_{1,3}\\
+    \beta_{2,1} & \beta_{2,2} & \beta_{2,3}
+  \end{pmatrix}
+  +
+  \begin{pmatrix}
+    \epsilon_{1,1} & \epsilon_{1,2} & \epsilon_{1,3} \\
+    \epsilon_{2,1} & \epsilon_{2,2} & \epsilon_{2,3} \\
+    \vdots \\
+    \epsilon_{n,1} & \epsilon_{n,2} & \epsilon_{n,3}
+  \end{pmatrix}}
+$$
+
+- Matrix form:
+    + $Y_{n\times q} = X_{n \times p}B_{p \times q} + \epsilon_{n \times q}$ 
+    + And $$\hat B = (X^TX)^{-1}X^TY$$ 
+- Note: no distributional assumption is required.
+
+
+# Prerequisite: Maximum Likelihood Estimation
+
+- Assume $Y_{i_{q\times 1}} \stackrel{iid}{\sim} Normal(B_{q\times p}X_{i_{p\times 1}}, \alpha^{-1}I_q)$
+- $P(Y_i|B, \alpha) = Cexp\{-\frac{\alpha}{2}(Y_i-B^TX_i)^T(Y_i-B^TX_i)\}$
+- $L(B, \alpha) =  C^N exp\{-\frac{\alpha}{2} \sum_{i=1}^n (Y_i-B^TX_i)^T(Y_i-B^TX_i)\}$
+- $\ell(B, \alpha) = Nlog(C) -\frac{\alpha}{2} \sum_{i=1}^n (Y_i-B^TX_i)^T(Y_i-B^TX_i)$
+- In matrix form,  
+    + $\ell(B, \alpha) = Nlog(C) -\frac{\alpha}{2}(Y-XB)^T(Y-XB)$
+    + $\ell(B, \alpha) \simeq -\frac{\alpha}{2}[B^T(X^TX)B - B^T(X^TY)]$
+    + $$\frac{\partial \ell}{\partial B} = 0 \Longrightarrow (X^TX)B - (X^TY)=0$$
+
+# Prerequisite: Multivariate Bayesian Regression
+
+- Assume $B$ has a gaussian prior, i.e. $B\sim Normal(m_0, V_0)$
+- By bayes rule:$$P(B|Y)  \varpropto P(Y|B,\alpha)P(B|m_0,V_0)$$
+- It can be shown that: $$B|Y\sim Normal(m,V)$$
+    + where $m = (X^TX+V_0)^{-1}(X^TY + V_0m_0)$
+    + i.e. $m = (X^TX+V_0)^{-1}[(X^TX)(X^TX)^{-1}X^TY + V_0m_0]$
+    + and $$m = (X^TX+V_0)^{-1}[(X^TX)\hat B + V_0m_0]$$
+
+---
+
+# Prerequisite: Bayesian Regression vs OLS
+
+Prerequesite take home,
+
+| Method | Parameter estimate |
+|---------|--------------------------|
+| OLS | $\hat B_{ols} = (X^TX)^{-1}X^TY$ |
+| MLE | $\hat B_{mle} = (X^TX)^{-1}X^TY$ |
+|Bayesian | $\hat B_{bayes} = (X^TX+V_0)^{-1}[(X^TX)\hat B_{ols} + V_0m_0]$ |
+
+---
+
+# Prerequisite: Bayesian Regression vs OLS
+
+Prerequesite take home,
+
+| Method | Parameter estimate | Topic Models|
+|---------|--------------------------|------|
+| OLS | $\hat B_{ols} = (X^TX)^{-1}X^TY$ | MF/NMF |
+| MLE | $\hat B_{mle} = (X^TX)^{-1}X^TY$ | pLSA|
+|Bayesian | $\hat B_{bayes} = (X^TX+V_0)^{-1}[(X^TX)\hat B_{ols} + V_0m_0]$ | LDA |
+
+---
+
+## Non Negative Matrix Factorization (NMF)
+
+---
+
+# NMF: Matrix Factorization (MF)
+
+- There are several MF algorithms, mostly used for two purposes:
+    + To solve linear systems (e.g.: LU, QR decompositions);
+    + For statistical analysis (e.g.: Factor Analysis, PCA/LSA).
+
+- The general idea of MF is: 
+    + Let $W_{D\times V}$ be a matrix of dimension $D\times V$;
+    + then $$W_{D\times V}\simeq Z_{D\times K} B_{K\times V}$$
+    + $K$ is an arbitrary number.
+
+---
+
+# NMF: Matrix Factorization (MF)
+
+```{r, echo = FALSE, message = FALSE, warning = FALSE, results = 'asis'}
+W <- matrix(c(4,    6,    0,    2,    2,
+             0,    0,    4,    8,   12,
+             6,    9,    1,    5,    6,
+             2,    3,    3,    7,   10,
+             0,    0,    3,    6,    9,
+             4,    6,    1,    4,    5), byrow = TRUE, nrow = 6)
+W1 <- data.frame(W) 
+names(W1) <- c("college", "education", "family", "health", "medicaid")
+row.names(W1) <- paste0("document.", 1:6)
+X <- W1
+stargazer(W1, summary = FALSE, title = "Example matrix of words counts", 
+			type = "latex", font.size = "normalsize", label = "W_mat", header = FALSE)
+W = X
+```
+
+
+---
+
+# NMF: Matrix Factorization (MF)
+
+## Example:
+
+\[  \underbrace{\begin{bmatrix} 4&6&0&2&2  \\  0&0&4&8&12  \\  6&9&1&5&6 \\     2&3&3&7&10 \\ 0&0&3&6&9 \\ 4&6&1&4&5 \\ 	\end{bmatrix} 		}_{\mathbf{W_{6 \times 5}}} \simeq \underbrace{\begin{bmatrix}  2&0  \\ 0&4  \\ 3&1 \\ 1&3 \\ 0&3 \\ 2&1 \\ 	\end{bmatrix} 		}_{\mathbf{Z_{6 \times 2}}}  \underbrace{\begin{bmatrix}  2&3&0&1&1 \\ 0&0&1&2&3 \\              	\end{bmatrix} 		}_{\mathbf{B_{2 \times 5}}}  \]
+
+---
+
+# NMF: Matrix Factorization (MF)
+
+```{r, echo=FALSE, warning = FALSE, message=FALSE, results='asis', fig.height=3, fig.width=3} 
+Z <- matrix(c(2, 0,
+             0, 4,
+             3, 1,
+             1, 3,
+             0, 3,
+             2, 1), byrow = TRUE, nrow = 6) 
+Z <- data.frame(z1 = Z[,1], z2 = Z[, 2]) 
+plot(x = Z$z1, y = Z$z2, cex = 3, 
+     xlab = expression(Z[1]), 
+     ylab = expression(Z[2]),
+     main = substitute(paste("Scatterplot based on the ", Z, " matrix", sep = ""))) 
+text(x = Z$z1, y = Z$z2, labels= 1:6, cex= 1) 
+```
+
+---
+
+# NMF: Matrix Factorization (MF)
+
+## MF: Iterative Multivariate Least Square algorithm
+
+- Write: $$W_{D\times V} = Z_{D\times K}B_{K\times V} + \epsilon_{D\times V}$$
+
+- From multivariate regression, we know: $$\hat B_{K\times V} = (Z^TZ)^{-1}Z^TW$$
+- But, we do not have $Z$; however, we can write: $$\hat Z_{D\times K} = WB^T[BB^T]^{-1}$$
+- Initialize random $Z$, and itteratively solve for $B$ and $Z$.
+
+---
+
+# Non Negative Matrix Factorization (NMF)
+
+## Non Negative Matrix Factorization
+
+- Impose constraints such that: $Z_{i,j}\geq0$, and $B_{i,j}\geq0$ $$W_{D\times V}\simeq Z^{nmf}B^{nmf}$$
+
+- Let $D_{W_{d,d}}=\sum_{v=1}^{V}W_{d,v}$ and $D_{B_{k,k}}=\sum_{v=1}^{V}B_{k,v}$ be some normalizing matrices.
+- Then, $Z^*$ and $B^*$ can be interpreted as probabilities: $$\begin{aligned}D_{W}^{-1}W	&=\left[D_{W}^{-1}ZD_{B}\right]\left[D_{B}^{-1}B\right]\\
+	&\Longleftrightarrow \\
+W^*	&=Z^*B^*
+\end{aligned}$$
+
+---
+
+# NMF: Matrix Factorization (MF)
+
+## Observation:
+
+> - $$\hat{B}_{K\times V}	=\left[Z^{T}Z\right]^{-1}Z^{T}W
+	=P_{K\times D}W_{D\times V}$$
+> - $$
+\hat B = 
+\begin{pmatrix}
+    B_{1,1} & B_{1,2}& \cdots & B_{1,V}\\
+    B_{2,1} & B_{2,2}& \cdots  & B_{1,V} \\
+    \vdots & \vdots & \ddots & \vdots \\
+    B_{K,1} & B_{K,2}& \cdots  & B_{K,V}
+  \end{pmatrix}
+$$
+
+> - $$\hat{B}_{k,v}=\sum_{d=1}^{D}P_{k,d}W_{d,v}$$
+
+---
+
+# NMF: Matrix Factorization (MF)
+
+## Observation: 
+
+> - $$\hat{Z}_{D\times K}	=WB^{T}\left[BB^{T}\right]^{-1}
+	=W_{D\times V}Q_{V\times K}$$ 
+
+> - $$
+\hat Z = 
+\begin{pmatrix}
+    Z_{1,1} & Z_{1,2}& \cdots & Z_{1,K}\\
+    Z_{2,1} & Z_{2,2}& \cdots  & Z_{1,K} \\
+    \vdots & \vdots & \ddots & \vdots \\
+    Z_{D,1} & Z_{D,2}& \cdots  & _{D,K}
+  \end{pmatrix}
+$$ 
+
+> - $$\hat{Z}_{d,k}=\sum_{v=1}^{V}Q_{v,k}W_{d,v}$$ 
+
+--- 
+
+## Principal Component Analysis (PCA) 
+
+--- 
+
+# PCA: Spectral decomposition 
+- PCA is MF with two additional constraints:
+    + We want $Z$ to be non correlated (orthogonal($\perp$));
+    + We also want to preserve the variance of the $W$ matrix.
+- Solution: find an $\perp$ matrix $\tilde B$ such that $Z = W \tilde B$ is $\perp$. 
+- Observe that if $Z = W \tilde B$, then: $$\begin{aligned} C_{Z}	&=\frac{1}{n-1}Z^{T}Z \\
+	&=\frac{1}{n-1}\left[\tilde B^{T}W^{T}W \tilde B\right] \\
+	&= \tilde B^{T}\left[\frac{1}{n-1}W^{T}W\right]\tilde B \\
+	&=\tilde B^{T}C_{W}\tilde B\end{aligned}$$ 
+
+--- 
+
+# PCA: Spectral decomposition 
+- Thus: $$C_Z = \tilde B^{T}C_{W}\tilde B$$ 
+- **Theorem:** If A is symmetric, there is an orthonormal matrix $E$ such that $A=EDE^{T}$, where $D$ is a diagonal matrix. 
+- This theorem (Spectral decomposition) is all we need for PCA. 
+- Translation: 
+    + Compute the $C_W$ from the data matrix ($W$);
+    + Use eigen-decomposition to get $E$, and use $E$ as $\tilde B$;
+    + Then compute $Z = WE=W\tilde B$
+
+---
+
+# PCA: Spectral decomposition 
+- To check if $Z$ is $\perp$, use the theorem and set $\tilde B=E$,
+$$\begin{aligned}
+C_{Z}	&=\tilde B^{T}C_{W}\tilde B \\
+	&=E^{T}\left[EDE^{T}\right]E \\
+	&=E^{T}EDE^{T}E \\
+	&=D
+\end{aligned}$$ 
+- **Definition:** The total variance is the trace of the covariance matrix
+$$\begin{aligned}
+tr(C_{Z})	&=tr(D) \\
+	&=tr(\tilde B^{T}C_{W}\tilde B) \\
+	&=tr(E^{T}C_{W}E) \\
+	&=tr(EE^{T}C_{W}) \\
+	&=tr(C_{W})
+\end{aligned}$$
+
+---
+
+# PCA: Spectral decomposition
+
+- As a dimension reduction method, we hope that there is a $K<<V$ such that $\sum_{k=1}^{K}d_{k,k}\simeq tr(C_{W})$; in which case, $Z_{D\times K}\simeq W_{D\times V}E_{V\times K}$ approximates $W_{D\times V}$. 
+- Then, we can approximately retrieve $W_{D\times V}$ by writing: $$\begin{aligned}
+Z_{D\times K}E_{K\times V}^{T}	&\simeq W_{D\times V}E_{V\times K}E_{K\times V}^{T}\\
+	&\Longleftrightarrow \\
+W_{D\times V}	&\simeq Z_{D\times K}E_{K\times V}^{T}\\
+&= ZB
+\end{aligned}$$ 
+- Where $B_{K\times V}=E_{K\times V}^{T}$ and $Z_{D\times K}=W_{D\times V}E_{V\times K}$
+
+--- 
+
+# PCA: Singular Value Decomposition (SVD) 
+- SVD is a more general PCA algorithm. 
+- SVD states that any matrix $W$ can be decomposed as follows: $$W_{D\times V}=U_{D\times D}S_{D\times V}V_{V\times V}^{T}$$ 
+- $U$, $V$ are orthonormal matrices, i.e. $U^{T}U=UU^{T}=I_{D}$, $V^{T}V=VV^{T}=I_{V}$. $S$ is a diagonal matrix containing the $r=min(D,V)$ singular values $\sigma_{k}\geq0$ on the main diagonal, with $0$s filling the rest of the matrix.
+
+--- 
+
+# PCA: Singular Value Decomposition (SVD) 
+
+- By SVD, i.e. $$W_{D\times V}=U_{D\times D}S_{D\times V}V_{V\times V}^{T}$$ 
+- If $W_{D\times V}$ are zero means $V$ variables, the covariance matrix: 
+$$\begin{aligned}C_{W}	&=\frac{1}{n-1}W^{T}W \\
+	&=\frac{1}{n-1}VSU^{T}USV^{T} \\
+	&=\frac{1}{n-1}VS^{2}V^{T} \\
+	&=VDV^{T}
+\end{aligned}$$ 
+
+--- 
+
+# PCA: Singular Value Decomposition (SVD) 
+
+- If there is a K such that $\sigma_{K+i}\simeq0$, for $i=1,2,\cdots,V-K$, we can approximate $W_{D\times V}$, by $$W_{D\times V}\simeq U_{D\times K}S_{K\times K}V_{K\times V}^{T}$$
+- Along the spirit of $W\simeq ZB$, let's define $Z=US$, and $B=V^{T}$. Then, we can write:$$W\simeq ZB$$
+
+---
+
+## Latent Semantic Analysis (LSA)
+
+---
+
+# LSA
+
+- LSA is an application of SVD to a matrix of words counts.
+- As such, LSA is exactly another application of PCA.
+- Example
+
+---
+
+## Probabilistic Latent Semantic Analysis (pLSA)
+
+---
+
+# pLSA
+
+- For statisticians, LSA has two major problems: 
+    + It does not account for the fact that text data are count data. 
+    + It does not assume any distribution for the data. 
+- pLSA was proposed to address these concerns
+
+---
+
+# Probabilistic Latent Semantic Analysis (pLSA)
+
+- Assume $p(w_{v}|d_{i})$ is the probability of observing the word $w_{v}$ in the document $d_{i}$.
+
+- Then: 
+$$\begin{aligned}
+p(w_{v}|d_{i})	&=\sum_{z\in Z}p(w_{v},z|d_{i}) \\
+	&=\sum_{z\in Z}p(w_{v}|z,d_{i})p(z|d_{i}) \\
+	&=\sum_{z\in Z}p(w_{v}|z)p(z|d_{i})
+\end{aligned}$$
+
+---
+
+# Probabilistic Latent Semantic Analysis (pLSA)
+
+- A document is a collection of $N_{d_{i}}=\sum_{v}^{V}n_{d_{i},w_{v}}$  words, assumed independent. Therefore: $$p(w_{1},w_{2},\cdots,w_{V}|d_{i})=\prod_{v=1}^{V}p(w_{v}|d_{i})^{n(d_{i},w_{v})}$$
+- Assuming $D$ independent documents, $$L(\theta|W) = p(W|D)=\prod_{d=1}^{D}\prod_{v=1}^{V}p(w_{v}|d_{i})^{n(d_{i},w_{v})}$$ $$\mathcal{L}(\theta|W)=\sum_{d=1}^{D}\sum_{v=1}^{V}n(d_{i},w_{v})log\left(\sum_{z\in Z}p(w_{v}|z)p(z|d_{i})\right)$$
+
+---
+
+# Probabilistic Latent Semantic Analysis (pLSA)
+
+- $$p(z_{k}|d_{i},w_{v})=\frac{p(w_{v}|z_{k})p(z_{k}|d_{i})}{\sum_{l=1}^{K}p(w_{v}|z_{l})p(z_{l}|d_{i})}$$
+- $$p(w_{v}|z_{k})=\frac{\sum_{d=1}^{D}n(d_{i},w_{v})p(z_{k}|d_{i},w_{v})}{\sum_{v=1}^{V}\sum_{d=1}^{D}n(d_{i},w_{v})p(z_{k}|d_{i},w_{v})}$$
+- $$p(z_{k}|d_{i})=\frac{\sum_{v=1}^{V}n(d_{i},w_{v})p(z_{k}|d_{i},w_{v})}{\sum_{k=1}^{K}\sum_{v=1}^{V}n(d_{i},w_{v})p(z_{k}|d_{i},w_{v})}$$
+
+---
+
+# Probabilistic Latent Semantic Analysis (pLSA)
+
+> - $$p(w_{v},d_{i})	=\sum_{Z}p(z)p(w_{v}|z)p(d_{i}|z)
+	=\sum_{z_{k}=1}^{K}p(d_{i}|z_{k})p(z_{k})p(w_{v}|z_{k})$$
+> - Let's define $U=\left[p(d_{i}|z_{k})\right]{}_{D\times K}$, $V^{T}=\left[p(w_{v}|z_{k})\right]_{K\times V}$, and $S=\left[p(z_{k})\right]_{K\times K}$. 
+> - Then, it follows that: 
+$$\begin{aligned}
+\left[p(w_{v},d_{i})\right]_{D\times V} 	&=\sum_{z_{k}=1}^{K}p(d_{i}|z_{k})p(z_{k})p(w_{v}|z_{k}) \\
+	&=\left[p(d_{i}|z_{k})\right]{}_{D\times K}\left[p(z_{k})\right]_{K\times K}\left[p(w_{v}|z_{k})\right]_{K\times V} \\
+	&=USV^{T}
+\end{aligned}$$
+
+---
+
+## Latent Dirichlet Allocation (LDA)
+
+---
+
+# Latent Dirichlet Allocation (LDA)
+
+- LDA is a Bayesian treatment of pLSA
+
+$$\begin{aligned}
+p(z_{k}|d)	=\theta_{d,k} \\
+p(w_{v}|z_{k})	=\phi_{k,v}
+\end{aligned}$$
+
+$$\begin{aligned}
+\theta_{d}\sim Dirichlet_{K}(\alpha) \\
+\phi_{k}\sim Dirichlet_{V}(\beta_{k})
+\end{aligned}$$
+
+---
+
+# Latent Dirichlet Allocation (LDA)
+
+- MCMC or Variational Bayes (VB) methods are used to approximate the posterior distribution for $\theta$ and $\phi$.
+- By VB, 
+$$\begin{aligned}
+\theta_{d}|w_{d},\boldsymbol{\tilde\alpha}\sim Dirichlet_{K}(\boldsymbol{\tilde{\alpha}_{d}})\\
+\phi_{k}|w,\boldsymbol{\tilde\beta}\sim Dirichlet_{V}(\boldsymbol{\tilde{\beta_{k}}})
+\end{aligned}$$
+
+---
+
+# Latent Dirichlet Allocation (LDA)
+
+$$E(z_{d,v,\cdot})=exp(E(log(\theta_{d,\cdot}))+E(log(\phi_{\cdot,v})))$$
+
+$$E(\theta_{d}|\tilde{\alpha_{d}})=\frac{\alpha+\sum_{v=1}^{V}n_{d,v}\times E(z_{d,v,.})}{\sum_{k=1}^{K}[\alpha+\sum_{v=1}^{V}E(z_{d,v,k})]}$$
+
+$$E(\phi_{k}|\tilde{\beta_{k}})=\frac{\beta+\sum_{d=1}^{D}n_{d,v}\times E(z_{d,\cdot,k})}{\sum_{v=1}^{V}(\beta+\sum_{d=1}^{D}n_{d,v}\times E(z_{d,v,k}))}$$
+
+
+---
+
+# Take home message $Z$
+
+- NMF is OLS: $$\hat{Z}_{d,k}=\sum_{v=1}^{V}W_{d,v}Q_{v,k}$$
+
+- PLSA is MLE: $$p(z_{k}|d_{i})=\frac{\sum_{v=1}^{V}n(d_{i},w_{v})p(z_{k}|d_{i},w_{v})}{\sum_{k=1}^{K}\sum_{v=1}^{V}n(d_{i},w_{v})p(z_{k}|d_{i},w_{v})}$$
+
+- LDA is Bayesian: $$E(\theta_{d}|\tilde{\alpha_{d}})=\frac{\alpha+\sum_{v=1}^{V}n_{d,v}E(z_{d,v,.})}{\sum_{k=1}^{K}[\alpha+\sum_{v=1}^{V}E(z_{d,v,k})]}$$
+
+---
+
+# Take home message $B$
+
+- NMF is OLS: $$\hat{B}_{k,v}=\sum_{d=1}^{D}W_{d,v}P_{k,d}$$
+
+- PLSA is MLE: $$p(w_{v}|z_{k})=\frac{\sum_{d=1}^{D}n(d_{i},w_{v})p(z_{k}|d_{i},w_{v})}{\sum_{v=1}^{V}\sum_{d=1}^{D}n(d_{i},w_{v})p(z_{k}|d_{i},w_{v})}$$
+
+- LDA is Bayesian: $$E(\phi_{k}|\tilde{\beta_{k}})=\frac{\beta+\sum_{d=1}^{D}n_{d,v}*E(z_{d,.,k})}{\sum_{v=1}^{V}(\beta+\sum_{d=1}^{D}n_{d,v}*E(z_{d,v,k}))}$$

@@ -1,0 +1,48 @@
+---
+title: "LSA is SVD"
+author: "Salfo Bikienga"
+date: "October 03, 2018"
+output: pdf_document
+---
+
+```{r, tidy.opts = list(width.cutoff = 80), echo = FALSE, message = FALSE, warning = FALSE}
+library(stargazer)
+library(lsa)
+options(digits = 3, scipen=999)
+```
+
+```{r, tidy.opts = list(width.cutoff = 80), echo = FALSE, message = FALSE, warning = FALSE, results = 'asis'}
+W <- matrix(c(4,    6,    0,    2,    2,
+             0,    0,    4,    8,   12,
+             6,    9,    1,    5,    6,
+             2,    3,    3,    7,   10,
+             0,    0,    3,    6,    9,
+             4,    6,    1,    4,    5), byrow = TRUE, nrow = 6)
+W1 <- data.frame(W) 
+names(W1) <- c("college", "education", "family", "health", "medicaid")
+row.names(W1) <- paste0("document.", 1:6)
+X <- W1
+stargazer(W1, summary = FALSE, title = "Example matrix of words counts", 
+			type = "latex", font.size = "normalsize", label = "W_mat", header = FALSE)
+W = X
+```
+
+
+```{r, message = FALSE, warning = FALSE}
+svd_W = svd(W) # Singular Value Decomposition applied to the data
+svd_W
+```
+
+```{r, tidy.opts = list(width.cutoff = 80), echo = FALSE, message = FALSE, warning = FALSE, results = 'asis', eval=FALSE}
+stargazer(Z_svd, summary = FALSE,  title = "PC scores obtained by SVD",
+          type = "latex", font.size = "normalsize")
+```
+
+```{r, message = FALSE, warning = FALSE}
+library(lsa) # Needed to access the lsa function
+lsa_W = lsa(W)
+lsa_W # print the output
+# lsa_W$tk%*%diag(lsa_W$sk) # to check equality of pc-scores
+```
+
+
